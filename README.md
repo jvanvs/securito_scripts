@@ -1,2 +1,2 @@
 # securito_scripts
-Pentests scripts
+Pentest scripts
