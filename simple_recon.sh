@@ -13,8 +13,11 @@ fi
 
 DOMAIN="$1"
 EXCLUDED_FILE="excluded.txt"
+
+# Layout: <current_dir>/<DOMAIN>/<TIMESTAMP>/
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-OUTPUT_DIR="results/$TIMESTAMP"
+DOMAIN_DIR="$(pwd)/$DOMAIN"
+OUTPUT_DIR="$DOMAIN_DIR/$TIMESTAMP"
 mkdir -p "$OUTPUT_DIR"
 
 # Output files
@@ -50,6 +53,7 @@ notify_summary() {
   local total_elapsed=$(( $(date +%s) - SCRIPT_START ))
   local lines=()
   lines+=("Recon finished for ${DOMAIN} ✅")
+  lines+=("Output dir: ${OUTPUT_DIR}")
   lines+=("Total time: $(human_time "$total_elapsed")")
   lines+=("")
   lines+=("Per stage (entries · duration):")
@@ -98,11 +102,12 @@ update_url_count() {
 
 draw_dashboard() {
     clear
-    local percent=$(( (100 * STEP) / (TOTAL_STEPS - 1) ))
+    local percent=$(( (100 * STEP) / (TOTAL_STEPS - 1)) )
     echo "=============================="
     echo "  Subdomain & URL Discovery"
     echo "=============================="
     echo "Target Domain: $DOMAIN"
+    echo "Output base:  $DOMAIN_DIR"
     echo "Progress: Step $STEP / $((TOTAL_STEPS - 1)) - ${TOOLS[$STEP]}"
     echo "Progress: $percent%"
     echo "Total URLs discovered: $TOTAL_URLS"
@@ -218,8 +223,8 @@ end_merge=$(date +%s)
 STAGE_TIMES["final merge"]=$(( end_merge - start_merge ))
 STAGE_COUNTS["final merge"]=$( [ -f "$FINAL_URLS" ] && wc -l < "$FINAL_URLS" || echo 0 )
 
-# Delta report
-LAST_DIR=$(ls -dt results/*/ 2>/dev/null | grep -v "$TIMESTAMP" | head -n 1 || true)
+# Delta report (ONLY within this domain folder)
+LAST_DIR=$(ls -dt "$DOMAIN_DIR"/*/ 2>/dev/null | grep -v "$TIMESTAMP" | head -n 1 || true)
 LAST_FINAL="${LAST_DIR%/}/final_urls.txt"
 if [[ -n "${LAST_DIR:-}" && -f "$LAST_FINAL" ]]; then
     echo "[*] Generating delta report..."
@@ -227,12 +232,12 @@ if [[ -n "${LAST_DIR:-}" && -f "$LAST_FINAL" ]]; then
     echo "✅ Delta report saved to $DELTA_REPORT"
     echo "New URLs since last run: $(wc -l < "$DELTA_REPORT")"
 else
-    echo "[*] No previous run to compare for delta."
+    echo "[*] No previous run to compare for delta (domain: $DOMAIN)."
 fi
 
-# Cleanup old runs
-echo -e "\n🧹 Cleaning up old results (keeping last 3)..."
-ls -dt results/*/ 2>/dev/null | tail -n +4 | xargs -r rm -rf
+# Cleanup old runs (keep last 3 for THIS domain only)
+echo -e "\n🧹 Cleaning up old results for ${DOMAIN} (keeping last 3)..."
+ls -dt "$DOMAIN_DIR"/*/ 2>/dev/null | tail -n +4 | xargs -r rm -rf
 echo "✅ Cleanup complete."
 
 echo
