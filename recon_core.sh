@@ -46,7 +46,6 @@ mkdir -p "$OUTPUT_DIR"
 # Outputs
 SUBFINDER_OUT="$OUTPUT_DIR/subfinder_out.txt"
 CRT_OUT="$OUTPUT_DIR/crtsh_out.txt"
-AMASS_OUT="$OUTPUT_DIR/amass_out.txt"
 COMBINED_SUBS="$OUTPUT_DIR/combined_subs.txt"
 FILTERED_DOMAINS="$OUTPUT_DIR/filtered.txt"
 ACTIVE_DOMAINS="$OUTPUT_DIR/active_domains.txt"
@@ -54,8 +53,8 @@ FINAL_URLS="$OUTPUT_DIR/final_urls.txt"     # kept for compatibility (not used i
 DELTA_REPORT="$OUTPUT_DIR/delta_report.txt"
 AQUA_OUT_DIR="$OUTPUT_DIR/aquatone"
 
-# Steps
-TOOLS=("subfinder" "crt.sh" "amass" "filter" "httpx (rate-limited)" "aquatone (ports small, rate-limited)")
+# Steps (amass removed)
+TOOLS=("subfinder" "crt.sh" "filter" "httpx (rate-limited)" "aquatone (ports small, rate-limited)")
 TOTAL_STEPS=${#TOOLS[@]}
 STEP=0; TOTAL_URLS=0; LAST_LINES=()
 
@@ -161,14 +160,11 @@ time_block "crt.sh" '
 update_last_lines "$CRT_OUT"; draw_dashboard
 STAGE_COUNTS["crt.sh"]=$( [ -f "$CRT_OUT" ] && wc -l < "$CRT_OUT" || echo 0 )
 
-# 2) amass (passive, always)
-run_with_dashboard 2 "$AMASS_OUT" amass enum -passive -d "$DOMAIN" -timeout 8
+# Merge discovery (amass removed)
+cat "$SUBFINDER_OUT" "$CRT_OUT" | sort -u > "$COMBINED_SUBS"
 
-# Merge discovery
-cat "$SUBFINDER_OUT" "$CRT_OUT" "$AMASS_OUT" | sort -u > "$COMBINED_SUBS"
-
-# 3) filter (local)
-STEP=3
+# 2) filter (local)
+STEP=2
 time_block "filter" '
   if [[ -f "'"$EXCLUDED_FILE"'" ]]; then
     grep -vFf "'"$EXCLUDED_FILE"'" "'"$COMBINED_SUBS"'" > "'"$FILTERED_DOMAINS"'"
@@ -179,17 +175,17 @@ time_block "filter" '
 update_last_lines "$FILTERED_DOMAINS"; draw_dashboard
 STAGE_COUNTS["filter"]=$( [ -f "$FILTERED_DOMAINS" ] && wc -l < "$FILTERED_DOMAINS" || echo 0 )
 
-# 4) httpx (ACTIVE, always rate-limited)
-run_with_dashboard 4 "$ACTIVE_DOMAINS" \
+# 3) httpx (ACTIVE, rate-limited)
+run_with_dashboard 3 "$ACTIVE_DOMAINS" \
   httpx -silent -l "$FILTERED_DOMAINS" \
-        -rate "$RATE" -threads "$THREADS" \
+        -rl "$RATE" -threads "$THREADS" \
         -timeout "$TIMEOUT" -retries "$RETRIES" \
-        -follow-redirects -prefer-https
+        -follow-redirects
 
-# 5) Aquatone (ACTIVE) on ACTIVE_DOMAINS, ports small, with input throttle
+# 4) Aquatone (ACTIVE) on ACTIVE_DOMAINS, ports small, with input throttle
 mkdir -p "$AQUA_OUT_DIR"
 
-STEP=5
+STEP=4
 STAGE_ORDER+=("aquatone (ports small, rate-limited)")
 start_aq=$(date +%s)
 AQUA_INPUT_COUNT=$( [ -f "$ACTIVE_DOMAINS" ] && wc -l < "$ACTIVE_DOMAINS" || echo 0 )
